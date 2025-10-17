@@ -17,4 +17,6 @@ class PasswordEvaluation(BaseModel):
     effective_entropy_bits: float
     strength: str
     is_in_dictionary: bool
+    has_common_patterns: bool
     estimated_crack_time: str
+    security_recommendations: list[str]

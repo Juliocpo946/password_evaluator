@@ -1,5 +1,7 @@
 import math
 import string
+import re
+from collections import Counter
 from app.core.config import settings
 from app.services.dictionary import dictionary
 
@@ -30,13 +32,71 @@ def calculate_entropy(password: str) -> float:
     if N == 0:
         return 0.0
     
+    char_freq = Counter(password)
+    unique_chars = len(char_freq)
+    
+    if unique_chars < L * 0.5:
+        repetition_penalty = (unique_chars / L) * 0.7
+        return L * math.log2(N) * repetition_penalty
+    
     return L * math.log2(N)
+
+def detect_patterns(password: str) -> bool:
+    patterns = [
+        r'^[A-Z][a-z]+\d+$',
+        r'^\d+[A-Za-z]+$',
+        r'^[A-Za-z]+\d+$',
+        r'(123|234|345|456|567|678|789|890)',
+        r'(abc|bcd|cde|def|efg|fgh)',
+        r'(qwerty|asdfgh|zxcvbn)',
+        r'(.)\1{2,}'
+    ]
+    
+    for pattern in patterns:
+        if re.search(pattern, password, re.IGNORECASE):
+            return True
+    
+    return False
+
+def check_dictionary_variants(password: str) -> bool:
+    if dictionary.contains(password):
+        return True
+    
+    base = re.sub(r'\d+$', '', password)
+    if len(base) >= 4 and dictionary.contains(base):
+        return True
+    
+    base_lower = password.lower()
+    base_no_numbers = re.sub(r'\d', '', base_lower)
+    if len(base_no_numbers) >= 4 and dictionary.contains(base_no_numbers):
+        return True
+    
+    return False
 
 def check_password_strength(password: str, entropy: float) -> tuple[str, float]:
     effective_entropy = entropy
+    penalties = []
     
-    if dictionary.contains(password):
-        effective_entropy = max(0, entropy - settings.DICTIONARY_PENALTY)
+    if check_dictionary_variants(password):
+        penalties.append(settings.DICTIONARY_PENALTY)
+    
+    if detect_patterns(password):
+        penalties.append(25.0)
+    
+    if len(password) < 8:
+        penalties.append(15.0)
+    
+    has_lower = any(c in string.ascii_lowercase for c in password)
+    has_upper = any(c in string.ascii_uppercase for c in password)
+    has_digit = any(c in string.digits for c in password)
+    has_symbol = any(c in string.punctuation for c in password)
+    
+    char_variety = sum([has_lower, has_upper, has_digit, has_symbol])
+    if char_variety < 3:
+        penalties.append(20.0)
+    
+    total_penalty = sum(penalties)
+    effective_entropy = max(0, entropy - total_penalty)
     
     if effective_entropy < settings.ENTROPY_WEAK_THRESHOLD:
         strength = "Débil"
@@ -49,7 +109,8 @@ def check_password_strength(password: str, entropy: float) -> tuple[str, float]:
 
 def estimate_crack_time(entropy: float) -> str:
     total_combinations = 2 ** entropy
-    seconds = total_combinations / (2 * settings.ATTACK_RATE)
+    avg_attempts = total_combinations / 2
+    seconds = avg_attempts / settings.ATTACK_RATE
     
     if seconds < 60:
         return f"{seconds:.2f} segundos"
