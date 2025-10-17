@@ -429,3 +429,6 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 4. **Tasa de ataque fija**: Asume 10¹¹ intentos/segundo constante
 
 ---
+
+## Despliegue en Render
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Juliocpo946/password_evaluator.git)
