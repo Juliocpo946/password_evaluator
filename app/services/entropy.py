@@ -61,17 +61,16 @@ def detect_patterns(password: str) -> bool:
 def check_dictionary_variants(password: str) -> bool:
     if dictionary.contains(password):
         return True
-    min_length = 4
-    for i in range(len(password) - min_length + 1):
-        for j in range(i + min_length, len(password) + 1):
-            substring = password[i:j]
-            if dictionary.contains(substring):
-                return True
     
     base = re.sub(r'\d+$', '', password)
-    if len(base) >= 4 and base != password and dictionary.contains(base):
+    if len(base) >= 4 and dictionary.contains(base):
         return True
-        
+    
+    base_lower = password.lower()
+    base_no_numbers = re.sub(r'\d', '', base_lower)
+    if len(base_no_numbers) >= 4 and dictionary.contains(base_no_numbers):
+        return True
+    
     return False
 
 def check_password_strength(password: str, entropy: float) -> tuple[str, float]:
