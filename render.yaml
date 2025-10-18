@@ -1,9 +1,11 @@
 services:
-  # A Docker web service
   - type: web
-    name: password_evaluator
+    name: password-evaluator
     runtime: python
     plan: free
     autoDeploy: false
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: 1
