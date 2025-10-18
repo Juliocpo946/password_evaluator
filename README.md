@@ -48,10 +48,11 @@ curl -X POST "http://localhost:8000/api/v1/password/evaluate" \
 | keyspace_size | integer | Tamaño del espacio de claves (N) |
 | entropy_bits | float | Entropía teórica calculada: L × log₂(N) |
 | effective_entropy_bits | float | Entropía real después de penalizaciones |
-| strength | string | Clasificación: "Débil", "Fuerte", "Muy Fuerte" |
-| is_in_dictionary | boolean | Si está en diccionario de 1M contraseñas |
+| strength | string | Clasificación: "Muy Débil", "Débil", "Moderada", "Fuerte", "Muy Fuerte" |
+| is_exact_dictionary_match | boolean | Si es idéntica a una palabra del diccionario |
+| is_partial_dictionary_match | boolean | Si contiene una palabra del diccionario |
 | has_common_patterns | boolean | Si contiene patrones predecibles |
-| estimated_crack_time | string | Tiempo estimado de crackeo (10¹¹ intentos/seg) |
+| estimated_crack_time | string | Tiempo estimado de crackeo (10¹² intentos/seg) |
 | security_recommendations | array[string] | Lista de mejoras sugeridas |
 
 #### Ejemplo de Response (200 OK)
@@ -63,7 +64,8 @@ curl -X POST "http://localhost:8000/api/v1/password/evaluate" \
   "entropy_bits": 105.23,
   "effective_entropy_bits": 105.23,
   "strength": "Muy Fuerte",
-  "is_in_dictionary": false,
+  "is_exact_dictionary_match": false,
+  "is_partial_dictionary_match": false,
   "has_common_patterns": false,
   "estimated_crack_time": "5.12e+20 años",
   "security_recommendations": [
@@ -86,8 +88,9 @@ Evaluación exitosa.
   "keyspace_size": 62,
   "entropy_bits": 83.36,
   "effective_entropy_bits": 83.36,
-  "strength": "Muy Fuerte",
-  "is_in_dictionary": false,
+  "strength": "Fuerte",
+  "is_exact_dictionary_match": false,
+  "is_partial_dictionary_match": false,
   "has_common_patterns": false,
   "estimated_crack_time": "1966287.65 años",
   "security_recommendations": [
@@ -150,44 +153,52 @@ E = L × log₂(N)
 | Dígitos (0-9) | 10 |
 | Símbolos | 32 |
 
-### 2. Penalizaciones Aplicadas
+### 2. Verificación de Diccionario
+
+El sistema verifica contra 1 millón de contraseñas comprometidas:
+
+- **Coincidencia exacta**: La contraseña es idéntica a una del diccionario
+- **Coincidencia parcial**: La contraseña contiene una palabra del diccionario
+
+### 3. Penalizaciones Aplicadas
 
 | Condición | Penalización |
 |-----------|--------------|
-| Palabra en diccionario (1M contraseñas) | -40 bits |
-| Patrones comunes detectados | -25 bits |
-| Longitud menor a 8 caracteres | -15 bits |
-| Menos de 3 tipos de caracteres | -20 bits |
+| Coincidencia exacta o parcial en diccionario | × 0.5 (50% de entropía) |
+| Patrones comunes detectados | × 0.7 (30% adicional) |
 
-### 3. Patrones Detectados
+**Aplicación**: Las penalizaciones son multiplicativas sobre la entropía efectiva.
 
-- Palabra + números al final: `Contrasena123`
-- Secuencias numéricas: `123`, `234`, `345`
+### 4. Patrones Detectados
+
+- Secuencias numéricas: `123`, `234`, `345`, `456`, `567`, `678`, `789`
 - Secuencias alfabéticas: `abc`, `bcd`, `cde`
-- Patrones de teclado: `qwerty`, `asdfgh`
+- Patrones de teclado: `qwerty`, `asdfg`
 - Caracteres repetidos: `aaa`, `111`
 
-### 4. Clasificación de Fortaleza
+### 5. Clasificación de Fortaleza
 
 | Entropía Efectiva | Clasificación |
 |-------------------|---------------|
-| 0 - 59 bits | Débil |
-| 60 - 79 bits | Fuerte |
-| 80+ bits | Muy Fuerte |
+| 0 - 39 bits | Muy Débil |
+| 40 - 59 bits | Débil |
+| 60 - 79 bits | Moderada |
+| 80 - 119 bits | Fuerte |
+| 120+ bits | Muy Fuerte |
 
-### 5. Tiempo de Crackeo
+### 6. Tiempo de Crackeo
 
 ```
-Tiempo = (2^E_efectiva / 2) / 10¹¹
+Tiempo = (2^E_efectiva) / 10¹²
 ```
 
-**Tasa de ataque**: 100,000,000,000 intentos/segundo
+**Tasa de ataque**: 1,000,000,000,000 (10¹²) intentos/segundo
 
 ---
 
 ## Ejemplos de Uso
 
-### Caso 1: Contraseña Débil
+### Caso 1: Contraseña Muy Débil
 
 **Request**:
 ```json
@@ -202,14 +213,15 @@ Tiempo = (2^E_efectiva / 2) / 10¹¹
   "password_length": 11,
   "keyspace_size": 36,
   "entropy_bits": 56.93,
-  "effective_entropy_bits": 0.0,
-  "strength": "Débil",
-  "is_in_dictionary": true,
+  "effective_entropy_bits": 19.93,
+  "strength": "Muy Débil",
+  "is_exact_dictionary_match": true,
+  "is_partial_dictionary_match": false,
   "has_common_patterns": true,
   "estimated_crack_time": "0.00 segundos",
   "security_recommendations": [
     "Incrementa la longitud a al menos 12 caracteres",
-    "Evita usar palabras de diccionario o variaciones predecibles",
+    "La contraseña es idéntica a una palabra de diccionario. Elígela de nuevo.",
     "Elimina patrones secuenciales o caracteres repetidos",
     "Agrega letras mayúsculas",
     "Agrega símbolos especiales"
@@ -233,8 +245,9 @@ Tiempo = (2^E_efectiva / 2) / 10¹¹
   "keyspace_size": 94,
   "entropy_bits": 78.98,
   "effective_entropy_bits": 78.98,
-  "strength": "Fuerte",
-  "is_in_dictionary": false,
+  "strength": "Moderada",
+  "is_exact_dictionary_match": false,
+  "is_partial_dictionary_match": false,
   "has_common_patterns": false,
   "estimated_crack_time": "15234.56 años",
   "security_recommendations": [
@@ -259,8 +272,9 @@ Tiempo = (2^E_efectiva / 2) / 10¹¹
   "keyspace_size": 94,
   "entropy_bits": 118.47,
   "effective_entropy_bits": 118.47,
-  "strength": "Muy Fuerte",
-  "is_in_dictionary": false,
+  "strength": "Fuerte",
+  "is_exact_dictionary_match": false,
+  "is_partial_dictionary_match": false,
   "has_common_patterns": false,
   "estimated_crack_time": "1.42e+24 años",
   "security_recommendations": [
@@ -297,7 +311,7 @@ Tiempo = (2^E_efectiva / 2) / 10¹¹
 
 ### Linux/Mac
 ```bash
-# Contraseña débil
+# Contraseña muy débil
 curl -X POST "http://localhost:8000/api/v1/password/evaluate" \
   -H "Content-Type: application/json" \
   -d '{"password": "password123"}'
@@ -315,7 +329,7 @@ curl -X POST "http://localhost:8000/api/v1/password/evaluate" \
 
 ### Windows PowerShell
 ```powershell
-# Contraseña débil
+# Contraseña muy débil
 Invoke-RestMethod -Uri "http://localhost:8000/api/v1/password/evaluate" `
   -Method POST `
   -ContentType "application/json" `
@@ -335,7 +349,7 @@ import requests
 url = "http://localhost:8000/api/v1/password/evaluate"
 headers = {"Content-Type": "application/json"}
 
-# Contraseña débil
+# Contraseña muy débil
 response = requests.post(url, json={"password": "password123"}, headers=headers)
 print(response.json())
 
@@ -350,7 +364,7 @@ print(response.json())
 
 ### JavaScript (Fetch API)
 ```javascript
-// Contraseña débil
+// Contraseña muy débil
 fetch('http://localhost:8000/api/v1/password/evaluate', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
@@ -382,8 +396,8 @@ fetch('http://localhost:8000/api/v1/password/evaluate', {
 ### Logs Críticos
 Solo se registran errores del sistema, nunca datos de usuarios:
 ```
-[2025-10-16 10:30:45] [DICTIONARY] [ERROR] Archivo de diccionario no encontrado
-[2025-10-16 10:31:12] [PASSWORD] [ERROR] Fallo inesperado en evaluación
+[2025-10-17 10:30:45] [DICTIONARY] [ERROR] Archivo de diccionario no encontrado
+[2025-10-17 10:31:12] [PASSWORD] [ERROR] Fallo inesperado en evaluación
 ```
 
 ### CORS
@@ -395,14 +409,14 @@ Configurado para aceptar peticiones de cualquier origen en desarrollo.
 ## Instalación
 
 ### Requisitos
-- Python 3.10+
+- Python 3.11+
 - pip
 
 ### Pasos
 ```bash
 # Clonar repositorio
-git clone <url-repositorio>
-cd password-evaluator
+git clone https://github.com/Juliocpo946/password_evaluator.git
+cd password_evaluator
 
 # Instalar dependencias
 pip install -r requirements.txt
@@ -426,9 +440,24 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 1. **Diccionario estático**: 1M contraseñas comprometidas
 2. **Patrones básicos**: Detección limitada a patrones comunes
 3. **Sin análisis contextual**: No evalúa contraseñas en contexto de usuario
-4. **Tasa de ataque fija**: Asume 10¹¹ intentos/segundo constante
+4. **Tasa de ataque fija**: Asume 10¹² intentos/segundo constante
 
 ---
 
 ## Despliegue en Render
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Juliocpo946/password_evaluator.git)
+
+### Configuración Manual
+
+1. Crear nuevo Web Service en Render
+2. Conectar repositorio de GitHub
+3. Configuración automática detectada desde `render.yaml`
+4. Deploy automático
+
+---
+
+## Repositorio y Documentación
+
+- **GitHub**: https://github.com/Juliocpo946/password_evaluator.git
+- **Postman**: https://documenter.getpostman.com/view/48692012/2sB3QNr
