@@ -2,8 +2,14 @@ import csv
 from typing import Set
 from app.core.config import settings
 from app.core.logger import setup_logger
+from enum import Enum
 
 logger = setup_logger(__name__)
+
+class MatchType(str, Enum):
+    NO_MATCH = "NO_MATCH"
+    EXACT_MATCH = "EXACT_MATCH"
+    PARTIAL_MATCH = "PARTIAL_MATCH"
 
 class PasswordDictionary:
     _instance = None
@@ -32,9 +38,19 @@ class PasswordDictionary:
         except Exception as e:
             logger.error(f"Error al cargar diccionario: {str(e)}")
     
-    def contains(self, password: str) -> bool:
+    def check_password(self, password: str) -> MatchType:
         if not self._loaded:
             self.load()
-        return password.lower() in self._passwords
+        
+        password_lower = password.lower()
+        
+        if password_lower in self._passwords:
+            return MatchType.EXACT_MATCH
+            
+        for dict_pass in self._passwords:
+            if dict_pass in password_lower:
+                return MatchType.PARTIAL_MATCH
+        
+        return MatchType.NO_MATCH
 
 dictionary = PasswordDictionary()

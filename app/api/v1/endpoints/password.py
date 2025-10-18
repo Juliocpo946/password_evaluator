@@ -6,10 +6,9 @@ from app.services.entropy import (
     calculate_entropy,
     check_password_strength,
     estimate_crack_time,
-    detect_patterns,
-    check_dictionary_variants
+    detect_patterns
 )
-from app.services.dictionary import dictionary
+from app.services.dictionary import dictionary, MatchType
 from app.core.logger import setup_logger
 
 router = APIRouter()
@@ -17,14 +16,22 @@ logger = setup_logger(__name__)
 
 dictionary.load()
 
-def generate_recommendations(password: str, strength: str, is_dict: bool, has_patterns: bool) -> list[str]:
+def generate_recommendations(
+    password: str, 
+    strength: str, 
+    exact_match: bool, 
+    partial_match: bool, 
+    has_patterns: bool
+) -> list[str]:
     recommendations = []
     
     if len(password) < 12:
         recommendations.append("Incrementa la longitud a al menos 12 caracteres")
     
-    if is_dict:
-        recommendations.append("Evita usar palabras de diccionario o variaciones predecibles")
+    if exact_match:
+        recommendations.append("La contraseña es idéntica a una palabra de diccionario. Elígela de nuevo.")
+    elif partial_match:
+        recommendations.append("La contraseña contiene una palabra común de diccionario. Evita usar variaciones predecibles.")
     
     if has_patterns:
         recommendations.append("Elimina patrones secuenciales o caracteres repetidos")
@@ -61,11 +68,18 @@ async def evaluate_password(request: PasswordRequest):
             )
         
         entropy = calculate_entropy(password)
-        strength, effective_entropy = check_password_strength(password, entropy)
-        is_in_dictionary = check_dictionary_variants(password)
+        
+        match_result = dictionary.check_password(password)
+        is_exact_match = match_result == MatchType.EXACT_MATCH
+        is_partial_match = match_result == MatchType.PARTIAL_MATCH
+        
+        is_in_dictionary_for_strength_check = is_exact_match or is_partial_match
+        
+        strength, effective_entropy = check_password_strength(password, entropy, is_in_dictionary_for_strength_check)
         has_patterns = detect_patterns(password)
         crack_time = estimate_crack_time(effective_entropy)
-        recommendations = generate_recommendations(password, strength, is_in_dictionary, has_patterns)
+        
+        recommendations = generate_recommendations(password, strength, is_exact_match, is_partial_match, has_patterns)
         
         return PasswordEvaluation(
             password_length=L,
@@ -73,7 +87,8 @@ async def evaluate_password(request: PasswordRequest):
             entropy_bits=round(entropy, 2),
             effective_entropy_bits=round(effective_entropy, 2),
             strength=strength,
-            is_in_dictionary=is_in_dictionary,
+            is_exact_dictionary_match=is_exact_match,
+            is_partial_dictionary_match=is_partial_match,
             has_common_patterns=has_patterns,
             estimated_crack_time=crack_time,
             security_recommendations=recommendations

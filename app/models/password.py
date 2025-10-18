@@ -1,14 +1,8 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
+from typing import List
 
 class PasswordRequest(BaseModel):
-    password: str = Field(..., min_length=1, max_length=128, description="Contraseña a evaluar")
-    
-    @field_validator('password')
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        if not v or v.isspace():
-            raise ValueError("La contraseña no puede estar vacía o contener solo espacios")
-        return v
+    password: str = Field(..., min_length=1)
 
 class PasswordEvaluation(BaseModel):
     password_length: int
@@ -16,7 +10,8 @@ class PasswordEvaluation(BaseModel):
     entropy_bits: float
     effective_entropy_bits: float
     strength: str
-    is_in_dictionary: bool
+    is_exact_dictionary_match: bool
+    is_partial_dictionary_match: bool
     has_common_patterns: bool
     estimated_crack_time: str
-    security_recommendations: list[str]
+    security_recommendations: List[str]
